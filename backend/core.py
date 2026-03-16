@@ -7,6 +7,7 @@ from langchain.messages import ToolMessage
 from langchain.tools import tool
 from langchain_pinecone import PineconeVectorStore
 from langchain_ollama import OllamaEmbeddings
+import re
 
 load_dotenv()
 
@@ -43,6 +44,15 @@ def retreive_context(query: str):
     # Return both serialized content and raw documents
     return serialized, retreived_docs
 
+# 定义过滤函数
+def clean_think_content(text: str) -> str:
+    if not text:
+        return text
+    # 匹配 <think>...</think> 并移除
+    pattern = r"<think>.*?</think>"
+    cleaned = re.sub(pattern, "", text, flags=re.DOTALL | re.IGNORECASE)
+    return cleaned.strip()
+
 def run_llm(query: str) -> Dict[str, Any]:
     """
     Run the RAG pipeline to answer a query using retrieved documentation.
@@ -76,6 +86,9 @@ def run_llm(query: str) -> Dict[str, Any]:
     # Extract the answer from the last AI message
     answer = response["messages"][-1].content
 
+    # 过滤思考的部分
+    answer = clean_think_content(answer)
+
     # Extract context documents from ToolMessage artifacts
     context_docs = []
     for message in response["messages"]:
@@ -91,5 +104,5 @@ def run_llm(query: str) -> Dict[str, Any]:
     }
 
 if __name__ == "__main__":
-    result = run_llm(query="什么是electron?")
+    result = run_llm(query="electron可以用来干嘛?")
     print(result)
