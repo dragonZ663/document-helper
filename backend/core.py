@@ -23,8 +23,10 @@ vectorstore = PineconeVectorStore(
 )
 
 # Initialize chat model
-model = init_chat_model(
-    "ollama:qwen3.5:2b"
+llm = init_chat_model(
+    "openai:qwen/qwen3.5-9b",
+    base_url=os.environ.get("LM_STUDIO_BASE_URL"),
+    api_key=os.environ.get("LM_STUDIO_API_KEY")
 )
 
 @tool(response_format="content_and_artifact")
@@ -40,3 +42,54 @@ def retreive_context(query: str):
 
     # Return both serialized content and raw documents
     return serialized, retreived_docs
+
+def run_llm(query: str) -> Dict[str, Any]:
+    """
+    Run the RAG pipeline to answer a query using retrieved documentation.
+
+    Args:
+        query: The user's question
+    
+    Returns:
+        Dictionary containing:
+            - answer: The user's question
+            - context: List of retrieved documents
+    
+    """
+    # Create the agent with retrieval tool
+    system_prompt = (
+        "You are a helpful AI assistant that answers questions about LangChain, electron documentation. "
+        "You have access to a tool that retrieves relevant documentation. "
+        "Use the tool to find relevant information before answering questions. "
+        "Always cite the sources you use in your answers. "
+        "If you cannot find the answer in the retrieved documentation, say so."
+    )
+
+    agent = create_agent(model=llm, tools=[retreive_context], system_prompt=system_prompt)
+
+    # Build messages list
+    messages = [{"role": "user", "content": query}]
+
+    # Invoke the agent
+    response = agent.invoke({"messages": messages})
+
+    # Extract the answer from the last AI message
+    answer = response["messages"][-1].content
+
+    # Extract context documents from ToolMessage artifacts
+    context_docs = []
+    for message in response["messages"]:
+        # Check if this is a ToolMessage with artifact
+        if isinstance(message, ToolMessage) and hasattr(message, "artifact"):
+            # The artifact should contain the list of Document objects
+            if isinstance(message.artifact, list):
+                context_docs.extend(message.artifact)
+
+    return {
+        "answer": answer,
+        "context": context_docs
+    }
+
+if __name__ == "__main__":
+    result = run_llm(query="什么是electron?")
+    print(result)
